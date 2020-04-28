@@ -13,10 +13,12 @@ import multiprocessing
 import syft as sy 
 hook = sy.TorchHook(torch)
   
-from mnist.mnist_settings import MNIST_Settings
-from mnist.mnist_settings import Net
+#from mnist.mnist_settings import MNIST_Settings
+from stroke_data.settings import Stroke_Settings
+from stroke_data.settings import Net
 
-args = MNIST_Settings()
+#args = MNIST_Settings()
+args = Stroke_Settings()
 
 # dev settings
 use_cuda = not args.no_cuda and torch.cuda.is_available()
@@ -31,6 +33,8 @@ for worker in range(args.vworkers):
   id_string = "worker" + str(worker)
   vworker_comp.append(sy.VirtualWorker(hook, id=id_string))
 
+print("{} virtual workers initialized".format(args.vworkers))
+
 # initialize train and test dataset
 train_dataset, test_dataset = args.gen_data()
 
@@ -42,12 +46,16 @@ test_loader = torch.utils.data.DataLoader(
     test_dataset,
     batch_size=args.test_batch_size, shuffle=True, **kwargs)
 
+print("train and test dataset loaded")
+
 # federate dataset
 remote_dataset = []
 for worker in range(args.vworkers):
   remote_dataset.append(list())
 
 remote_dataset = args.datafed_method(remote_dataset, train_loader, vworker_comp)
+
+print("dataset federated")
 
 # performs a round of training on local worker if available
 def update(args, model, device, data, target, optimizer):
