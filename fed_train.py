@@ -86,16 +86,17 @@ def train(args, vworker_models, device, remote_dataset, vworker_optimizers, vwor
     for l_epoch in range(1, args.local_epochs + 1): # for fedavg    
         print("Local epoch {}".format(l_epoch))
         
-        batchtracker = tqdm(range(len(remote_dataset[0])-1))
+        #batchtracker = tqdm(range(len(remote_dataset[0])-1))
+        batchtracker = tqdm(range(len(max(remote_dataset, key=len))-1)) # set to longest batch
         for data_index in batchtracker: # batch
            
             for i in range(args.vworkers): # worker
                 if(vworker_avail[i] < 0.5): # non-availability
                     #print("worker " + str(i) + " not available")
                     continue # don't calculate gradient update for this data
-                            
-                data, target = remote_dataset[i][data_index]
-                train_fn(vworker_models[i], device, data, target, vworker_optimizers, epoch)
+                if(data_index < len(remote_dataset[i])): # confirm worker has this batch            
+                    data, target = remote_dataset[i][data_index]
+                    train_fn(vworker_models[i], device, data, target, vworker_optimizers, epoch)
         
     # get models from available workers
     for i in range(args.vworkers):
@@ -128,8 +129,7 @@ vworker_models, vworker_params, vworker_optimizers = args.gen_local(device)
 start = time.time()
 
 for epoch in range(1, args.epochs + 1):
-    vworker_avail = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    #vworker_avail = np.random.choice(2, args.vworkers, p=[1-args.p_available, args.p_available])
+    vworker_avail = args.worker_availability(epoch)
     print('Epoch {} Availability:\n{}'.format(epoch, vworker_avail))
 
     train(args, vworker_models, device, remote_dataset, vworker_optimizers, vworker_avail, epoch) # train

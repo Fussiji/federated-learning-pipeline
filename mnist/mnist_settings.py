@@ -112,4 +112,9 @@ class MNIST_Settings():
 
         return vworker_models, vworker_params, vworker_optimizers
 
+    def worker_availability(self, epoch):
+        #vworker_avail = np.random.choice(2, self.vworkers, p=[1-self.p_available, self.p_available])
+        vworker_avail = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        return vworker_avail
+
 
