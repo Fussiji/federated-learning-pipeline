@@ -33,7 +33,7 @@ class MNIST_Settings():
         # local training
         self.batch_size = 16
         self.lr = 0.01
-        self.local_epochs = 1
+        self.local_epochs = 2
         self.loss = F.nll_loss
         # pipeline
         self.no_cuda = False
@@ -42,7 +42,7 @@ class MNIST_Settings():
         self.test_batch_size = 1000
         self.epochs = 3
         self.vworkers = 10
-        self.p_available = 1    # probability a virtual worker is available
+        self.p_available = 0.2    # probability a virtual worker is available
         self.save_model = False
 
     # create datasets

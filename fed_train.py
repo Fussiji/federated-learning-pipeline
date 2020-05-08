@@ -7,18 +7,18 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 
 import numpy as np
-import threading
-import multiprocessing
+from tqdm import tqdm
 
 import syft as sy 
 hook = sy.TorchHook(torch)
   
-#from mnist.mnist_settings import MNIST_Settings
-from stroke_data.settings import Stroke_Settings
-from stroke_data.settings import Net
+from mnist.mnist_settings import MNIST_Settings
+from mnist.mnist_settings import Net
+#from stroke_data.settings import Stroke_Settings
+#from stroke_data.settings import Net
 
-#args = MNIST_Settings()
-args = Stroke_Settings()
+args = MNIST_Settings()
+#args = Stroke_Settings()
 
 # dev settings
 use_cuda = not args.no_cuda and torch.cuda.is_available()
@@ -57,17 +57,17 @@ remote_dataset = args.datafed_method(remote_dataset, train_loader, vworker_comp)
 
 print("dataset federated")
 
-# performs a round of training on local worker if available
+# training one batch on local worker
 def update(args, model, device, data, target, optimizer):
-    model.train()
-    model.send(data.location)
+    #model.train()
+    #model.send(data.location)
     data, target = data.to(device), target.to(device)
     optimizer.zero_grad()
     output = model(data)
     loss = args.loss(output, target)
     loss.backward()
     optimizer.step()
-    model.get()
+    #model.get()
     return model, loss
 
 def train_fn (model, device, data, target, vworker_optimizers, epoch):
@@ -77,20 +77,30 @@ def train_fn (model, device, data, target, vworker_optimizers, epoch):
     return
 
 def train(args, vworker_models, device, remote_dataset, vworker_optimizers, vworker_avail, epoch):
-    print('{} batches'.format(len(remote_dataset[0])-1))
-    
-    for data_index in range(len(remote_dataset[0])-1): # batch
-       
-        for i in range(args.vworkers): # worker
-            if(vworker_avail[i] < 0.5): # non-availability
-                #print("worker " + str(i) + " not available")
-                continue # don't calculate gradient update for this data
-                        
-            data, target = remote_dataset[i][data_index]
-            train_fn(vworker_models[i], device, data, target, vworker_optimizers, epoch)
+    # send available workers their models
+    for i in range(args.vworkers):
+        if(vworker_avail[i] >= 0.5): # available
+            vworker_models[i].train()
+            vworker_models[i].send(vworker_comp[i])
+
+    for l_epoch in range(1, args.local_epochs + 1): # for fedavg    
+        print("Local epoch {}".format(l_epoch))
         
-        if data_index % args.log_interval == 0:
-            print('batch {} complete'.format(data_index))
+        batchtracker = tqdm(range(len(remote_dataset[0])-1))
+        for data_index in batchtracker: # batch
+           
+            for i in range(args.vworkers): # worker
+                if(vworker_avail[i] < 0.5): # non-availability
+                    #print("worker " + str(i) + " not available")
+                    continue # don't calculate gradient update for this data
+                            
+                data, target = remote_dataset[i][data_index]
+                train_fn(vworker_models[i], device, data, target, vworker_optimizers, epoch)
+        
+    # get models from available workers
+    for i in range(args.vworkers):
+        if(vworker_avail[i] >= 0.5): # available
+            vworker_models[i].get()
 
 # test code
 def test(args, model, device, test_loader):
@@ -118,11 +128,11 @@ vworker_models, vworker_params, vworker_optimizers = args.gen_local(device)
 start = time.time()
 
 for epoch in range(1, args.epochs + 1):
-    vworker_avail = np.random.choice(2, args.vworkers, p=[1-args.p_available, args.p_available])
+    vworker_avail = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    #vworker_avail = np.random.choice(2, args.vworkers, p=[1-args.p_available, args.p_available])
     print('Epoch {} Availability:\n{}'.format(epoch, vworker_avail))
 
-    for i in range(args.local_epochs):
-        train(args, vworker_models, device, remote_dataset, vworker_optimizers, vworker_avail, epoch) # train
+    train(args, vworker_models, device, remote_dataset, vworker_optimizers, vworker_avail, epoch) # train
     vworker_models, vworker_params = args.aggregate(vworker_models, device, vworker_params, vworker_avail) # aggregate
     test(args, vworker_models[0], device, test_loader) # test
 
